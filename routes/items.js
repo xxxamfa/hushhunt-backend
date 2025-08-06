@@ -1,39 +1,44 @@
 const express = require('express');
 const router = express.Router();
 const { db } = require('../firebase');
+const authMiddleware = require('../middleware/authMiddleware'); 
 
 // POST /api/items
-router.post('/', async (req, res) => {
+// add authMiddleware
+router.post('/', authMiddleware, async (req, res) => {
   try {
-    const { title, description, imageUrl, startingBid, deadline, sellerId } = req.body;
+    const sellerId = req.user.uid;
+    const { name, description, image, startBid, endDate } = req.body;
 
-    if (!title || !description || !imageUrl || !startingBid || !deadline || !sellerId) {
+    if (!name || !description || !image || !startBid || !endDate) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    const itemRef = await db.collection('items').add({
-      title,
+    const itemRef = await db.collection('auctionItems').add({
+      name,
       description,
-      imageUrl,
-      startingBid,
-      deadline: new Date(deadline),
+      image,
+      startBid: Number(startBid),
+      endDate: new Date(endDate),
       sellerId,
-      currentBid: startingBid,
-      currentBidderId: null,
+      currentBid: Number(startBid),
+      buyerId: null,
+      isActive: true,
+      isSold: false,
       createdAt: new Date()
     });
 
-    res.status(201).json({ id: itemRef.id });
+    res.status(201).json({ id: itemRef.id, message: 'Item created successfully' });
   } catch (error) {
-    console.error('Error uploading item:', error);
-    res.status(500).json({ error: 'Failed to upload item' });
+    console.error('Error creating item:', error);
+    res.status(500).json({ error: 'Failed to create item' });
   }
 });
 
 // GET /api/items
 router.get('/', async (req, res) => {
   try {
-    const snapshot = await db.collection('items').get();
+    const snapshot = await db.collection('auctionItems').where('isActive', '==', true).get();
     const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     res.json(items);
   } catch (error) {

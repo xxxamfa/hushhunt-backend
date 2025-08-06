@@ -1,17 +1,17 @@
 const express = require('express');
 const router = express.Router();
 const { db } = require('../firebase');
+const authMiddleware = require('../middleware/authMiddleware');
 
-// POST /api/bids
-router.post('/', async (req, res) => {
+router.post('/', authMiddleware, async (req, res) => {
     try {
-        const { itemId, bidderId, bidAmount } = req.body;
-
-        if (!itemId || !bidderId || !bidAmount) {
-            return res.status(400).json({ error: 'Missing fields' });
+        const { itemId, bidAmount } = req.body;
+        const bidderId = req.user.uid;
+        if (!itemId || !bidAmount) {
+            return res.status(400).json({ error: 'Missing itemId or bidAmount' });
         }
 
-        const itemRef = db.collection('items').doc(itemId);
+        const itemRef = db.collection('auctionItems').doc(itemId);
         const itemDoc = await itemRef.get();
 
         if (!itemDoc.exists) {
@@ -20,29 +20,37 @@ router.post('/', async (req, res) => {
 
         const item = itemDoc.data();
 
-        if (new Date(item.deadline.toDate ? item.deadline.toDate() : item.deadline) < new Date()) {
-            return res.status(400).json({ error: 'Auction ended' });
+        if (item.sellerId === bidderId) {
+            return res.status(403).json({ error: "You cannot bid on your own item." });
+        }
+        
+        if (new Date(item.endDate.toDate()) < new Date()) {
+            return res.status(400).json({ error: 'Auction has already ended' });
         }
 
-        if (bidAmount <= item.currentBid) {
-            return res.status(400).json({ error: 'Bid too low' });
+        if (Number(bidAmount) <= item.currentBid) {
+            return res.status(400).json({ error: 'Your bid must be higher than the current bid' });
         }
 
-        await db.collection('bids').add({
+        const batch = db.batch();
+        const bidRef = db.collection('bids').doc();
+        batch.set(bidRef, {
             itemId,
             bidderId,
-            bidAmount,
+            bidAmount: Number(bidAmount),
             createdAt: new Date()
         });
 
-        await itemRef.update({
-            currentBid: bidAmount,
-            currentBidderId: bidderId
+        batch.update(itemRef, {
+            currentBid: Number(bidAmount),
+            buyerId: bidderId
         });
 
+        await batch.commit();
         res.status(200).json({ message: 'Bid placed successfully' });
+
     } catch (error) {
-        console.error('Bid error:', error);
+        console.error('Error placing bid:', error);
         res.status(500).json({ error: 'Failed to place bid' });
     }
 });
