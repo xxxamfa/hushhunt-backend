@@ -1,16 +1,16 @@
 const express = require('express');
 const router = express.Router();
 const { db } = require('../firebase');
-const authMiddleware = require('../middleware/authMiddleware'); 
+const authMiddleware = require('../middleware/authMiddleware');
 
 // POST /api/items
 // add authMiddleware
 router.post('/', authMiddleware, async (req, res) => {
   try {
     const sellerId = req.user.uid;
-    const { name, description, image, startBid, endDate } = req.body;
+    const { name, description, image, startBid, endDate, category } = req.body;
 
-    if (!name || !description || !image || !startBid || !endDate) {
+    if (!name || !description || !image || !startBid || !endDate || !category) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
@@ -21,6 +21,7 @@ router.post('/', authMiddleware, async (req, res) => {
       startBid: Number(startBid),
       endDate: new Date(endDate),
       sellerId,
+      category,
       currentBid: Number(startBid),
       buyerId: null,
       isActive: true,
