@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { db } = require('../firebase');
 const authMiddleware = require('../middleware/authMiddleware');
+const { sendPushNotification } = require('../services/notificationService');
 
 router.post('/', authMiddleware, async (req, res) => {
     try {
@@ -30,6 +31,20 @@ router.post('/', authMiddleware, async (req, res) => {
 
         if (Number(bidAmount) <= item.currentBid) {
             return res.status(400).json({ error: 'Your bid must be higher than the current bid' });
+        }
+
+        const previousBidderId = item.buyerId; 
+
+        if (previousBidderId && previousBidderId !== bidderId) {
+            const userRef = db.collection('users').doc(previousBidderId);
+            const userDoc = await userRef.get();
+            if (userDoc.exists && userDoc.data().pushToken) {
+                const pushToken = userDoc.data().pushToken;
+                const notificationTitle = 'Your bid has been outbid!';
+                const notificationBody = `Someone placed a higher bid on ${item.name}.`;
+
+                sendPushNotification(pushToken, notificationTitle, notificationBody, { itemId });
+            }
         }
 
         const batch = db.batch();
